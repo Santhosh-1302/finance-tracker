@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Income | Finance Tracker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; color: #333; }
+
+    nav { background: #1a73e8; padding: 14px 30px; display: flex; align-items: center; gap: 20px; }
+    nav span { color: #fff; font-size: 20px; font-weight: 700; margin-right: auto; }
+    nav a { color: #fff; text-decoration: none; font-size: 14px; padding: 6px 14px; border-radius: 4px; transition: background .2s; }
+    nav a:hover, nav a.active { background: rgba(255,255,255,0.2); }
+
+    .container { max-width: 900px; margin: 36px auto; padding: 0 20px; }
+    h2 { font-size: 22px; margin-bottom: 24px; color: #1a1a2e; }
+
+    .form-card { background: #fff; border-radius: 10px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,.08); margin-bottom: 28px; }
+    .form-card h3 { font-size: 16px; margin-bottom: 16px; color: #444; }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .form-row input, .form-row select {
+      flex: 1; min-width: 160px; padding: 9px 12px;
+      border: 1px solid #ddd; border-radius: 6px; font-size: 14px;
+    }
+    .btn { padding: 9px 20px; border: none; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .2s; }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: #2e7d32; color: #fff; }
+    .btn-danger  { background: #ef4444; color: #fff; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+    .msg { margin-top: 10px; font-size: 13px; min-height: 18px; }
+    .msg.success { color: #2e7d32; } .msg.error { color: #c62828; }
+
+    .filter-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+    .filter-bar label { font-weight: 600; font-size: 14px; }
+    .filter-bar select { padding: 8px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+    thead { background: #2e7d32; color: #fff; }
+    th, td { padding: 11px 14px; text-align: left; font-size: 14px; }
+    tbody tr:hover td { background: #f0fdf4; }
+    tbody tr { border-bottom: 1px solid #f0f0f0; }
+    .total-row td { font-weight: 700; background: #e8f5e9; color: #1b5e20; }
+    .no-data { color: #aaa; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span>💰 Finance Tracker</span>
+  <a href="dashboard.html">Dashboard</a>
+  <a href="user.html">Users</a>
+  <a href="income.html" class="active">Income</a>
+  <a href="expense.html">Expense</a>
+</nav>
+
+<div class="container">
+  <h2>📥 Income Management</h2>
+
+  <div class="form-card">
+    <h3>➕ Add Income</h3>
+    <div class="form-row">
+      <select id="incomeUserId">
+        <option value="">-- Select User --</option>
+      </select>
+      <input type="text"   id="incomeSource" placeholder="Source (e.g. Salary)"/>
+      <input type="number" id="incomeAmount" placeholder="Amount (₹)" min="0" step="0.01"/>
+      <input type="date"   id="incomeDate"/>
+      <button class="btn btn-primary" onclick="addIncome()">Add</button>
+    </div>
+    <div class="msg" id="incomeMsg"></div>
+  </div>
+
+  <div class="filter-bar">
+    <label>Filter by User:</label>
+    <select id="filterUser" onchange="loadIncomes()">
+      <option value="">All Users</option>
+    </select>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>#</th><th>User</th><th>Source</th><th>Amount (₹)</th><th>Date</th><th>Action</th></tr>
+    </thead>
+    <tbody id="incomeTable">
+      <tr><td colspan="6" class="no-data">Loading...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  const BASE = 'http://localhost:8080/api';
+
+  async function loadUsers() {
+    const res   = await fetch(`${BASE}/users`);
+    const users = await res.json();
+    ['incomeUserId', 'filterUser'].forEach(selId => {
+      const sel = document.getElementById(selId);
+      const keep = sel.querySelector('option'); // keep first placeholder
+      sel.innerHTML = '';
+      sel.appendChild(keep.cloneNode(true));
+      users.forEach(u => {
+        const opt = document.createElement('option');
+        opt.value = u.id; opt.textContent = u.name;
+        sel.appendChild(opt);
+      });
+    });
+  }
+
+  async function loadIncomes() {
+    const userId = document.getElementById('filterUser').value;
+    const url    = userId ? `${BASE}/incomes/user/${userId}` : `${BASE}/incomes`;
+    const res    = await fetch(url);
+    const data   = await res.json();
+
+    // Fetch all users for name lookup
+    const usersRes = await fetch(`${BASE}/users`);
+    const users    = await usersRes.json();
+    const userMap  = {};
+    users.forEach(u => userMap[u.id] = u.name);
+
+    const tbody = document.getElementById('incomeTable');
+    if (data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="6" class="no-data">No income records found</td></tr>';
+      return;
+    }
+    let total = 0;
+    const rows = data.map((inc, i) => {
+      total += Number(inc.amount);
+      const uid = inc.user ? inc.user.id : (inc.userId || '');
+      return `<tr>
+        <td>${i + 1}</td>
+        <td>${userMap[uid] || uid}</td>
+        <td>${inc.source}</td>
+        <td>₹${Number(inc.amount).toFixed(2)}</td>
+        <td>${inc.date}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="deleteIncome(${inc.id})">Delete</button></td>
+      </tr>`;
+    });
+    rows.push(`<tr class="total-row"><td colspan="3">Total</td><td>₹${total.toFixed(2)}</td><td colspan="2"></td></tr>`);
+    tbody.innerHTML = rows.join('');
+  }
+
+  async function addIncome() {
+    const userId = document.getElementById('incomeUserId').value;
+    const source = document.getElementById('incomeSource').value.trim();
+    const amount = document.getElementById('incomeAmount').value;
+    const date   = document.getElementById('incomeDate').value;
+    const msg    = document.getElementById('incomeMsg');
+
+    if (!userId || !source || !amount || !date) {
+      showMsg(msg, 'Please fill all fields.', 'error'); return;
+    }
+    try {
+      const res = await fetch(`${BASE}/incomes/${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, amount: parseFloat(amount), date })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      showMsg(msg, 'Income added successfully!', 'success');
+      document.getElementById('incomeSource').value = '';
+      document.getElementById('incomeAmount').value = '';
+      document.getElementById('incomeDate').value   = '';
+      loadIncomes();
+    } catch (e) { showMsg(msg, 'Error: ' + e.message, 'error'); }
+  }
+
+  async function deleteIncome(id) {
+    if (!confirm('Delete this income record?')) return;
+    await fetch(`${BASE}/incomes/${id}`, { method: 'DELETE' });
+    loadIncomes();
+  }
+
+  function showMsg(el, text, type) {
+    el.textContent = text; el.className = 'msg ' + type;
+    setTimeout(() => { el.textContent = ''; }, 3000);
+  }
+
+  loadUsers().then(loadIncomes);
+</script>
+</body>
+</html>

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Users | Finance Tracker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; color: #333; }
+
+    nav {
+      background: #1a73e8; padding: 14px 30px;
+      display: flex; align-items: center; gap: 20px;
+    }
+    nav span { color: #fff; font-size: 20px; font-weight: 700; margin-right: auto; }
+    nav a { color: #fff; text-decoration: none; font-size: 14px; padding: 6px 14px; border-radius: 4px; transition: background .2s; }
+    nav a:hover, nav a.active { background: rgba(255,255,255,0.2); }
+
+    .container { max-width: 860px; margin: 36px auto; padding: 0 20px; }
+    h2 { font-size: 22px; margin-bottom: 24px; color: #1a1a2e; }
+
+    .form-card {
+      background: #fff; border-radius: 10px; padding: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 28px;
+    }
+    .form-card h3 { font-size: 16px; margin-bottom: 16px; color: #444; }
+    .form-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .form-row input {
+      flex: 1; min-width: 180px; padding: 9px 12px;
+      border: 1px solid #ddd; border-radius: 6px; font-size: 14px;
+    }
+    .btn {
+      padding: 9px 20px; border: none; border-radius: 6px;
+      font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity .2s;
+    }
+    .btn:hover { opacity: .85; }
+    .btn-primary { background: #1a73e8; color: #fff; }
+    .btn-warning { background: #f59e0b; color: #fff; }
+    .btn-danger  { background: #ef4444; color: #fff; }
+    .btn-sm { padding: 5px 12px; font-size: 12px; }
+
+    .msg { margin-top: 10px; font-size: 13px; min-height: 18px; }
+    .msg.success { color: #2e7d32; }
+    .msg.error   { color: #c62828; }
+
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    thead { background: #1a73e8; color: #fff; }
+    th, td { padding: 11px 14px; text-align: left; font-size: 14px; }
+    tbody tr:hover td { background: #f5f9ff; }
+    tbody tr { border-bottom: 1px solid #f0f0f0; }
+    .no-data { color: #aaa; }
+  </style>
+</head>
+<body>
+
+<nav>
+  <span>💰 Finance Tracker</span>
+  <a href="dashboard.html">Dashboard</a>
+  <a href="user.html" class="active">Users</a>
+  <a href="income.html">Income</a>
+  <a href="expense.html">Expense</a>
+</nav>
+
+<div class="container">
+  <h2>👤 User Management</h2>
+
+  <!-- Add / Edit Form -->
+  <div class="form-card">
+    <h3 id="formTitle">➕ Add New User</h3>
+    <div class="form-row">
+      <input type="hidden"  id="userId"/>
+      <input type="text"    id="userName"  placeholder="Full Name"    required/>
+      <input type="email"   id="userEmail" placeholder="Email Address" required/>
+      <button class="btn btn-primary" onclick="saveUser()">Save</button>
+      <button class="btn btn-warning" onclick="cancelEdit()" id="cancelBtn" style="display:none">Cancel</button>
+    </div>
+    <div class="msg" id="formMsg"></div>
+  </div>
+
+  <!-- User Table -->
+  <table>
+    <thead>
+      <tr><th>#</th><th>Name</th><th>Email</th><th>Actions</th></tr>
+    </thead>
+    <tbody id="userTable">
+      <tr><td colspan="4" class="no-data">Loading...</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+  const BASE = 'http://localhost:8080/api/users';
+  let editMode = false;
+
+  async function loadUsers() {
+    const res   = await fetch(BASE);
+    const users = await res.json();
+    const tbody = document.getElementById('userTable');
+    tbody.innerHTML = users.length === 0
+      ? '<tr><td colspan="4" class="no-data">No users found</td></tr>'
+      : users.map((u, i) => `
+          <tr>
+            <td>${i + 1}</td>
+            <td>${u.name}</td>
+            <td>${u.email}</td>
+            <td>
+              <button class="btn btn-warning btn-sm" onclick="editUser(${u.id},'${u.name}','${u.email}')">Edit</button>
+              <button class="btn btn-danger btn-sm"  onclick="deleteUser(${u.id})">Delete</button>
+            </td>
+          </tr>`).join('');
+  }
+
+  async function saveUser() {
+    const id    = document.getElementById('userId').value;
+    const name  = document.getElementById('userName').value.trim();
+    const email = document.getElementById('userEmail').value.trim();
+    const msg   = document.getElementById('formMsg');
+
+    if (!name || !email) { showMsg(msg, 'Please fill all fields.', 'error'); return; }
+
+    const method = id ? 'PUT' : 'POST';
+    const url    = id ? `${BASE}/${id}` : BASE;
+
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email })
+      });
+      if (!res.ok) throw new Error(await res.text());
+      showMsg(msg, id ? 'User updated!' : 'User added!', 'success');
+      cancelEdit();
+      loadUsers();
+    } catch (e) {
+      showMsg(msg, 'Error: ' + e.message, 'error');
+    }
+  }
+
+  function editUser(id, name, email) {
+    document.getElementById('userId').value    = id;
+    document.getElementById('userName').value  = name;
+    document.getElementById('userEmail').value = email;
+    document.getElementById('formTitle').textContent = '✏️ Edit User';
+    document.getElementById('cancelBtn').style.display = 'inline-block';
+  }
+
+  function cancelEdit() {
+    document.getElementById('userId').value    = '';
+    document.getElementById('userName').value  = '';
+    document.getElementById('userEmail').value = '';
+    document.getElementById('formTitle').textContent = '➕ Add New User';
+    document.getElementById('cancelBtn').style.display = 'none';
+    document.getElementById('formMsg').textContent = '';
+  }
+
+  async function deleteUser(id) {
+    if (!confirm('Delete this user? All their income and expense records will also be removed.')) return;
+    await fetch(`${BASE}/${id}`, { method: 'DELETE' });
+    loadUsers();
+  }
+
+  function showMsg(el, text, type) {
+    el.textContent = text;
+    el.className   = 'msg ' + type;
+    setTimeout(() => { el.textContent = ''; }, 3000);
+  }
+
+  loadUsers();
+</script>
+</body>
+</html>
